@@ -149,8 +149,8 @@ def main(url, quality='best', fps=30.0, kafka_url="kafka-svc:9092"):
                 
                 # Make sure to wait the duration of a ts between two requests
                 time_now = time.time()
-                if time_now - time_before < TS_DURATION:
-                    time.sleep(TS_DURATION - (time_now - time_before))
+                if time_now - time_before < TS_DURATION/2:
+                    time.sleep(TS_DURATION/2 - (time_now - time_before))
                 
             else:
                 # Make sure to wait the duration of a ts between two requests

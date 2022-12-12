@@ -4,6 +4,7 @@ import sys
 import streamlink
 import os
 import m3u8
+from m3u8.httpclient import DefaultHTTPClient
 from kafka import KafkaProducer
 import base64
 import time
@@ -33,23 +34,35 @@ def stream_to_url(url, quality='best'):
     else:
         raise ValueError("No streams were available")
 
-def parse_m3u8(url_m3u8, ts_list, date_list):
+def parse_m3u8(url_m3u8, ts_list, date_list, http_client):
     global TS_DURATION_SET
     global TS_DURATION
-    file = m3u8.load(url_m3u8)
-    for ts in file.segments:
-        if ts:
-            if ts.program_date_time not in date_set:
-                #print(ts.uri)
-                #print(ts.program_date_time)
-                if not(TS_DURATION_SET):
-                    print("(i) Determining TS_DURATION")
-                    TS_DURATION = ts.duration
-                    TS_DURATION_SET = True
-                    print("(i) TS_DURATION", TS_DURATION)
-                ts_list.append(ts.uri)
-                date_list.append(ts.program_date_time)
-                date_set.add(ts.program_date_time)
+    error_counter = 0
+    loaded = False
+    while(error_counter < 5 and not loaded):
+        try:
+            file = m3u8.load(url_m3u8, timeout=1, http_client=http_client)
+            loaded = True
+            for ts in file.segments:
+                if ts:
+                    if ts.program_date_time not in date_set:
+                        #print(ts.uri)
+                        #print(ts.program_date_time)
+                        if not(TS_DURATION_SET):
+                            print("(i) Determining TS_DURATION")
+                            TS_DURATION = ts.duration
+                            TS_DURATION_SET = True
+                            print("(i) TS_DURATION", TS_DURATION)
+                        ts_list.append(ts.uri)
+                        date_list.append(ts.program_date_time)
+                        date_set.add(ts.program_date_time)
+        except:
+            print("(e) Couldn't load m3u8, retry in 0.1 second...")
+            time.sleep(0.1)
+            error_counter += 1
+    if not loaded:
+        print('(e) Retried 5 times to load m3u8 exiting now')
+        exit(1)
     return ts_list, date_list
 
 def main(url, quality='best', fps=30.0, kafka_url="kafka-svc:9092"):
@@ -76,8 +89,10 @@ def main(url, quality='best', fps=30.0, kafka_url="kafka-svc:9092"):
 
     number_skipped = 0
 
+    httpClient = DefaultHTTPClient()
+
     while True:
-        ts_list, date_list = parse_m3u8(stream_url, ts_list, date_list)
+        ts_list, date_list = parse_m3u8(stream_url, ts_list, date_list, httpClient)
         #parser le m3u8 en ts
         if number_skipped < 8:
             time_before = time.time()

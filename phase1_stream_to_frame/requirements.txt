@@ -1,0 +1,5 @@
+streamlink>=5
+opencv-python-headless>=4
+m3u8
+kafka-python>=2.0.1
+numpy

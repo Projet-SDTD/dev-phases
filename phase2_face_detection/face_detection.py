@@ -4,6 +4,7 @@ import logging
 import sys
 import os
 import glob
+from PIL import Image
 from kafka import KafkaConsumer, KafkaProducer
 from json import dumps, loads
 import numpy as np
@@ -17,8 +18,8 @@ except ImportError:
 log = logging.getLogger(__name__)
 GREEN = (0, 255, 0)
 
-
 def detect_faces(cascade, frame, frame_number, scale_factor=1.1, min_neighbors=5):
+    #detect all the faces in a frame => return a list
     frame_copy = frame.copy()
     frame_gray = cv2.cvtColor(frame_copy, cv2.COLOR_BGR2GRAY)
     faces = cascade.detectMultiScale(frame_gray, scaleFactor=scale_factor, minNeighbors=min_neighbors)
@@ -37,6 +38,7 @@ def main(kafka_url = "kafka-svc:9092"):
     kafka_consumer = KafkaConsumer(  
         'phase1',
         api_version = (3,3,1),
+        # TODO
         security_protocol= "PLAINTEXT",
         bootstrap_servers = kafka_url,
         auto_offset_reset = 'earliest',  
@@ -65,7 +67,16 @@ def main(kafka_url = "kafka-svc:9092"):
         detected_faces = detect_faces(face_cascade, img_buffer, frame_number, scale_factor=1.2)
         #print(detected_faces)
         if(len(detected_faces) > 0):
-            new_message['detected_faces'] = detected_faces
+            for index, face in enumerate(detect_faces):
+                x = face[0]
+                y = face[1]
+                w = face[2]
+                h = face[3]
+                area = (x, y, x + w, y + h)
+                cropped_img = img.crop(area)
+                new_message['detected_face'] = face
+                new_message['frame'] = cropped_img
+                new_message['face_number'] = index
             #print(f"All types : message : {type(new_message)}, number : {type(new_message['frame_number'])}, img : {type(new_message['frame'])}, faces : {type(new_message['detected_faces'][0])}")
             kafka_producer.send("phase2", value=new_message)
     

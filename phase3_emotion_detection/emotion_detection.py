@@ -9,6 +9,7 @@ from cassandra.cluster import Cluster
 from PIL import Image
 from kafka import KafkaConsumer
 from json import loads
+from time import sleep
 
 from onnx import numpy_helper
 from enum import Enum
@@ -28,6 +29,8 @@ class Emotions(Enum):
     DISGUST = 5
     FEAR = 6
     CONTEMPT = 7
+    
+AUTHORIZED_RETRY = 10
 
 def preprocess(image):
   input_shape = (1, 1, 64, 64)
@@ -107,9 +110,22 @@ def main(kafka_url = "kafka-svc:9092", cassandra_url = "cassandra"):
     )
     print("Connected !")
     print("Connecting to Cassandra...")
-    cluster = Cluster([cassandra_url], port=9042)
-    session_cassandra = cluster.connect("stream_db", wait_for_all_pools=True)
-    session_cassandra.set_keyspace("stream_db")
+    number_retry = 0
+    connected = False
+    while (number_retry < AUTHORIZED_RETRY and not connected):
+        try :
+            cluster = Cluster([cassandra_url], port=9042)
+            session_cassandra = cluster.connect("stream_db", wait_for_all_pools=True)
+            session_cassandra.set_keyspace("stream_db")
+            connected = True
+        except:
+            print("ko")
+            number_retry += 1
+            sleep(20)
+    
+    if not connected:
+        raise RuntimeError("Couldn't connect to Cassandra") #la teuteu
+        
     print("Connected !")
     #faces_data = open("faces_data.txt", "r")
     #lines = faces_data.readlines()

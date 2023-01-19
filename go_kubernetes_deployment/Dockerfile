@@ -18,8 +18,6 @@ WORKDIR /
 
 COPY --from=build /kube_deployment /kube_deployment
 
-EXPOSE 3333
-
-USER nonroot:nonroot
+EXPOSE 80
 
 CMD [ "/kube_deployment" ] 

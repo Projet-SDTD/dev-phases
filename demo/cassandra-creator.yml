@@ -17,8 +17,7 @@ data:
 
     echo "Creating keyspace and table..."
     cqlsh cassandra -u $CASSANDRA_USER -p $CASSANDRA_PASSWORD -e "CREATE KEYSPACE IF NOT EXISTS Stream_DB WITH replication = {'class': 'SimpleStrategy', 'replication_factor': '1'};"
-    cqlsh cassandra -u $CASSANDRA_USER -p $CASSANDRA_PASSWORD -e "CREATE TABLE IF NOT EXISTS Stream_DB.frames (frame_id int, face_id int, x int, y int, w int, h int, main_emotion int, PRIMARY KEY (frame_id, face_id));"
----
+    cqlsh cassandra -u $CASSANDRA_USER -p $CASSANDRA_PASSWORD -e "CREATE TABLE IF NOT EXISTS Stream_DB.frames (frame_id int, face_id int, x int, y int, w int, h int, main_emotion int, timestampFrame text, url text, PRIMARY KEY (url, frame_id, face_id)) WITH CLUSTERING ORDER BY (frame_id DESC, face_id ASC);"
 apiVersion: batch/v1
 kind: Job
 metadata:

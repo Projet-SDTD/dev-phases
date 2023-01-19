@@ -151,7 +151,7 @@ def main(url, quality='best', fps=30.0, kafka_url="kafka-svc:9092"):
                                 print(frame_number)
                                 frame_64 = base64.b64encode(cv2.imencode('.jpg', frame)[1]).decode()
                                 print("sending frame to kafka...")
-                                kafka_producer.send("phase1", value={'frame_number' : frame_number, "frame" : frame_64})
+                                kafka_producer.send("phase1", value={'frame_number' : frame_number, "frame" : frame_64, "timestampFrame" : str(date), "url" : url})
                                 print("sent !")
                                 #cv2.imwrite(f"{frame_number}.jpg", frame)
                                 frame_number += 1

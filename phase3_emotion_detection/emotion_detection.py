@@ -9,6 +9,7 @@ from cassandra.cluster import Cluster
 from PIL import Image
 from kafka import KafkaConsumer
 from json import loads
+from time import sleep
 
 from onnx import numpy_helper
 from enum import Enum
@@ -28,6 +29,8 @@ class Emotions(Enum):
     DISGUST = 5
     FEAR = 6
     CONTEMPT = 7
+    
+AUTHORIZED_RETRY = 20
 
 def preprocess(image):
   input_shape = (1, 1, 64, 64)
@@ -96,7 +99,7 @@ def main(kafka_url = "kafka-svc:9092", cassandra_url = "cassandra"):
     input_name = session.get_inputs()[0].name
     print("Connecting to kafka...")
     kafka_consumer = KafkaConsumer(  
-        'phase2',
+        'phase3',
         api_version = (3,3,1),
         security_protocol= "PLAINTEXT",
         bootstrap_servers = kafka_url,
@@ -107,9 +110,23 @@ def main(kafka_url = "kafka-svc:9092", cassandra_url = "cassandra"):
     )
     print("Connected !")
     print("Connecting to Cassandra...")
-    cluster = Cluster([cassandra_url], port=9042)
-    session_cassandra = cluster.connect("stream_db", wait_for_all_pools=True)
-    session_cassandra.set_keyspace("stream_db")
+    number_retry = 0
+    connected = False
+    while (number_retry < AUTHORIZED_RETRY and not connected):
+        try :
+            cluster = Cluster([cassandra_url], port=9042)
+            session_cassandra = cluster.connect("stream_db", wait_for_all_pools=True)
+            session_cassandra.set_keyspace("stream_db")
+            connected = True
+        except:
+            print("ko")
+            number_retry += 1
+            sleep(20)
+    
+    
+    if not connected:
+        raise RuntimeError("Couldn't connect to Cassandra") #la teuteu
+    
     print("Connected !")
     #faces_data = open("faces_data.txt", "r")
     #lines = faces_data.readlines()
@@ -117,43 +134,44 @@ def main(kafka_url = "kafka-svc:9092", cassandra_url = "cassandra"):
 
     for message in kafka_consumer:
         message = message.value
+        for key in message.keys():
+            print(key)
         frame_number = message['frame_number']
+        face_number = message['face_number']
+        url = message['url']
+        timestampFrame = message['timestampFrame']
         print(frame_number)
         #emotion_res = open(f"emotion_res_{frame_number}.txt", "w+")
 
         img = base64.b64decode(message['frame'])
         img_buffer = np.array(cv2.imdecode(np.frombuffer(img, dtype=np.uint8) , flags=1))
         #print(img_buffer.shape)
-        all_faces = message['detected_faces']
+        face = message['detected_face']
         img = Image.fromarray(img_buffer.astype('uint8'), 'RGB')
         #print(all_faces)
         #emotion_res.write(f"{frame_number}.jpg ")
         res = ""
-        for index, face in enumerate(all_faces):
-            x = face[0]
-            y = face[1]
-            w = face[2]
-            h = face[3]
-            area = (x, y, x + w, y + h)
-            cropped_img = img.crop(area)
+        x = face[0]
+        y = face[1]
+        w = face[2]
+        h = face[3]
 
-            data = preprocess(cropped_img)
+        data = preprocess(img)
 
-            raw_res = session.run([], {input_name: data})
-            classes = postprocess(raw_res)
-            res += f"; {x}_{y}_{w}_{h} = "
-            for elem in classes:
-                res += f"{Emotions(elem).name} "
-            #print("len : ", len(classes))
-            if(len(classes) > 0):
-                #print("inserting...")
-                session_cassandra.execute(
-                    """
-                    INSERT INTO frames (frame_id, face_id, x, y, w, h, main_emotion) VALUES(%s, %s, %s, %s, %s, %s, %s)
-                    """,
-                    (frame_number, index, x, y, w, h, classes[0])
-                )
-            
+        raw_res = session.run([], {input_name: data})
+        classes = postprocess(raw_res)
+        res += f"; {x}_{y}_{w}_{h} = "
+        for elem in classes:
+            res += f"{Emotions(elem).name} "
+        
+        if(len(classes) > 0):
+            #print("inserting...")
+            session_cassandra.execute(
+                """
+                INSERT INTO frames (frame_id, face_id, x, y, w, h, main_emotion, timestampFrame, url) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (frame_number, face_number, x, y, w, h, classes[0], timestampFrame, url)
+            )
         #emotion_res.write(f"{res}\n")
         #print(f"{res}\n")
         #emotion_res.close()
@@ -166,5 +184,3 @@ if __name__=="__main__":
     if(CASSANDRA_URL is None):
         CASSANDRA_URL = "cassandra"
     main(KAFKA_URL, CASSANDRA_URL)
-
-

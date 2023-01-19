@@ -4,6 +4,7 @@ import logging
 import sys
 import os
 import glob
+from PIL import Image
 from kafka import KafkaConsumer, KafkaProducer
 from json import dumps, loads
 import numpy as np
@@ -17,8 +18,8 @@ except ImportError:
 log = logging.getLogger(__name__)
 GREEN = (0, 255, 0)
 
-
 def detect_faces(cascade, frame, frame_number, scale_factor=1.1, min_neighbors=5):
+    #detect all the faces in a frame => return a list
     frame_copy = frame.copy()
     frame_gray = cv2.cvtColor(frame_copy, cv2.COLOR_BGR2GRAY)
     faces = cascade.detectMultiScale(frame_gray, scaleFactor=scale_factor, minNeighbors=min_neighbors)
@@ -37,6 +38,7 @@ def main(kafka_url = "kafka-svc:9092"):
     kafka_consumer = KafkaConsumer(  
         'phase1',
         api_version = (3,3,1),
+        # TODO
         security_protocol= "PLAINTEXT",
         bootstrap_servers = kafka_url,
         auto_offset_reset = 'earliest',  
@@ -58,16 +60,28 @@ def main(kafka_url = "kafka-svc:9092"):
         new_message = message.copy()
         print(message["frame_number"])
         frame_number = message['frame_number']
+        #decode the b64 format -> bytes
         img = base64.b64decode(message['frame'])
+        #decode the cv2 encoding -> buffer
         img_buffer = cv2.imdecode(np.frombuffer(img, dtype=np.uint8) , flags=1)
-        #cv2.imwrite(f"stream/test_{frame_number}.jpg", img_buffer)
-        #print(np.array(img_buffer).shape)
         detected_faces = detect_faces(face_cascade, img_buffer, frame_number, scale_factor=1.2)
-        #print(detected_faces)
         if(len(detected_faces) > 0):
-            new_message['detected_faces'] = detected_faces
-            #print(f"All types : message : {type(new_message)}, number : {type(new_message['frame_number'])}, img : {type(new_message['frame'])}, faces : {type(new_message['detected_faces'][0])}")
-            kafka_producer.send("phase2", value=new_message)
+            for index, face in enumerate(detected_faces):
+                x = face[0]
+                y = face[1]
+                w = face[2]
+                h = face[3]
+                area = (x, y, x + w, y + h)
+                #crop the PIL Image to only have the detected face
+                cropped_img = img_buffer[y:y+h, x:x+w]
+                #encode image so that it can be send
+                frame_64 = base64.b64encode(cv2.imencode('.jpg', cropped_img)[1]).decode()
+                new_message['detected_face'] = face
+                new_message['frame'] = frame_64
+                new_message['face_number'] = index
+                #print(f"All types : message : {type(new_message)}, number : {type(new_message['frame_number'])}, img : {type(new_message['frame'])}, faces : {type(new_message['detected_faces'][0])}")
+                print(new_message['face_number'])
+                kafka_producer.send("phase3", value=new_message)
     
 
     '''
@@ -88,10 +102,8 @@ def main(url, quality='best', fps=30.0):
     os.chdir(directory)
     log.info("Loading stream {0}".format(stream_url))
     cap = cv2.VideoCapture(stream_url)
-
     frame_time = int((1.0 / fps) * 1000.0)
     frame_number = 0
-
     while True:
         try:
             ret, frame = cap.read()
@@ -105,7 +117,6 @@ def main(url, quality='best', fps=30.0):
                 break
         except KeyboardInterrupt:
             break
-
     cv2.destroyAllWindows()
     cap.release()
 '''
@@ -115,4 +126,3 @@ if __name__ == "__main__":
     if(KAFKA_URL is None):
         KAFKA_URL = "kafka-svc:9092"
     main(KAFKA_URL)
-

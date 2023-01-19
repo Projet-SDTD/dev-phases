@@ -21,7 +21,7 @@ spec:
           name: phase1
           env:
             - name: URL
-              value: https://www.twitch.tv/alphacast
+              value: https://www.twitch.tv/ponce
             - name: FPS
               value: "10"
             - name: STREAM_QUALITY

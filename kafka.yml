@@ -4,6 +4,22 @@ metadata:
   name: sdtd
 ---
 apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: kafka-pv-volume
+  labels:
+    type: local
+  namespace: sdtd
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: '/mnt/data'
+---
+apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: kafka-pv-claim
@@ -11,7 +27,7 @@ metadata:
 spec:
   storageClassName: manual
   accessModes:
-    - ReadWriteMany
+    - ReadWriteOnce
   resources:
     requests:
       storage: 3Gi
@@ -74,9 +90,7 @@ spec:
             - name: DEFAULT_REPLICATION_FACTOR
               value: '3'
             - name: DEFAULT_MIN_INSYNC_REPLICAS
-              value: '3'
-            - name: DEFAULT_NUM_PARTITIONS
-              value: '10'
+              value: '2'
           volumeMounts:
             - name: kafka-storage
               mountPath: /mnt/kafka

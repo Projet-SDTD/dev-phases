@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: initialization-script
+  namespace: sdtd
+data:
+  script.sh: |
+    #!/bin/sh
+    CONTINUE=1
+    until [ $CONTINUE -eq 0 ]
+    do 
+        sleep 5;
+        2>>/dev/null >>/dev/tcp/cassandra/9042;
+        CONTINUE=$(echo $?)
+        echo "Waiting for cassandra...";
+    done
+
+    echo "Creating keyspace and table..."
+    cqlsh cassandra -u $CASSANDRA_USER -p $CASSANDRA_PASSWORD -e "CREATE KEYSPACE IF NOT EXISTS Stream_DB WITH replication = {'class': 'SimpleStrategy', 'replication_factor': '1'};"
+    cqlsh cassandra -u $CASSANDRA_USER -p $CASSANDRA_PASSWORD -e "CREATE TABLE IF NOT EXISTS Stream_DB.frames (frame_id int, face_id int, x int, y int, w int, h int, main_emotion int, PRIMARY KEY (frame_id, face_id));"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cassandra-creator
+  namespace: sdtd
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: cassandra-creator
+          image: cassandra:4
+          command: ["/bin/bash", "/scripts/script.sh"]
+          env:
+            - name: CASSANDRA_USER
+              value: cassandra
+            - name: CASSANDRA_PASSWORD
+              value: cassandra
+          volumeMounts:
+          - name: scripts
+            mountPath: "/scripts"
+      volumes:
+      - name: scripts
+        configMap:
+          name: initialization-script
+          items:
+          - key: "script.sh"
+            path: "script.sh"

@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: phase1
+  name: phase1
+  namespace: sdtd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: phase1
+  template:
+    metadata:
+      labels:
+        app: phase1
+    spec:
+      containers:
+        - image: ilisius/phase1
+          imagePullPolicy: Always
+          name: phase1
+          env:
+            - name: URL
+              value: https://www.twitch.tv/alphacast
+            - name: FPS
+              value: "10"
+            - name: STREAM_QUALITY
+              value: 720p60
+            - name: KAFKA_URL
+              value: kafka-svc:9092
+          resources:
+            limits:
+              cpu: "1"
+              memory: 1Gi
+      restartPolicy: Always
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: phase2
+  name: phase2
+  namespace: sdtd
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: phase2
+  template:
+    metadata:
+      labels:
+        app: phase2
+    spec:
+      containers:
+        - image: ilisius/phase2
+          imagePullPolicy: Always
+          name: phase2
+          env:
+            - name: KAFKA_URL
+              value: kafka-svc:9092
+          resources:
+            limits:
+              cpu: "1"
+              memory: 1Gi
+      restartPolicy: Always
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: phase3
+  name: phase3
+  namespace: sdtd
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: phase3
+  template:
+    metadata:
+      labels:
+        app: phase3
+    spec:
+      containers:
+        - image: ilisius/phase3
+          imagePullPolicy: Always
+          name: phase3
+          env:
+            - name: KAFKA_URL
+              value: kafka-svc:9092
+            - name: CASSANDRA_URL
+              value: cassandra
+          resources:
+            limits:
+              cpu: "1"
+              memory: 1Gi
+      restartPolicy: Always

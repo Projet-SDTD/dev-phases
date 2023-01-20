@@ -215,7 +215,7 @@ func (h *handlers) handleDbtt(w http.ResponseWriter, r *http.Request) {
 	if streamingUrl == "" {
 		iter = h.CassandraSession.Query(`SELECT frame_id, face_id, x, y, w, h, main_emotion, timestampFrame, url FROM Stream_DB.frames LIMIT 50`).Iter()
 	} else {
-		iter = h.CassandraSession.Query(`SELECT frame_id, face_id, x, y, w, h, main_emotion, timestampFrame, url FROM Stream_DB.frames WHERE url = ? LIMIT 50`, streamingUrl).Iter()
+		iter = h.CassandraSession.Query(`SELECT frame_id, face_id, x, y, w, h, main_emotion, timestampFrame, url FROM Stream_DB.frames WHERE url = ? LIMIT 1`, streamingUrl).Iter()
 	}
 
 	for iter.Scan(&frameId, &faceId, &x, &y, &width, &height, &mainEmotion, &timestampFrame, &url) {

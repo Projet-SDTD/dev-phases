@@ -122,7 +122,7 @@ func createDeployment(url, quality, fps, streamerName string, deploymentsClient 
 							},
 							Resources: apiv1.ResourceRequirements{
 								Limits: apiv1.ResourceList{
-									apiv1.ResourceCPU:    resource.MustParse("1"),
+									apiv1.ResourceCPU:    resource.MustParse("2"),
 									apiv1.ResourceMemory: resource.MustParse("500Mi"),
 								},
 							},

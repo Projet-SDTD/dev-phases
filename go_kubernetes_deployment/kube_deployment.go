@@ -129,6 +129,23 @@ func createDeployment(url, quality, fps, streamerName string, deploymentsClient 
 						},
 					},
 					RestartPolicy: "Always",
+					NodeSelector: map[string]string{
+						"worker": "true",
+					},
+					Tolerations: []apiv1.Toleration{
+						{
+							Effect:            "NoExecute",
+							Key:               "node.kubernetes.io/unreachable",
+							Operator:          "Exists",
+							TolerationSeconds: int64Ptr(10),
+						},
+						{
+							Effect:            "NoExecute",
+							Key:               "node.kubernetes.io/not-ready",
+							Operator:          "Exists",
+							TolerationSeconds: int64Ptr(10),
+						},
+					},
 				},
 			},
 		},
@@ -154,6 +171,7 @@ func destroyDeployment(streamerName string, deploymentsClient v1.DeploymentInter
 }
 
 func int32Ptr(i int32) *int32 { return &i }
+func int64Ptr(i int64) *int64 { return &i }
 
 //Web server
 

@@ -41,7 +41,7 @@ def parse_m3u8(url_m3u8, ts_list, date_list, http_client):
     loaded = False
     while(error_counter < 5 and not loaded):
         try:
-            file = m3u8.load(url_m3u8, timeout=1, http_client=http_client)
+            file = m3u8.load(url_m3u8, timeout=3, http_client=http_client)
             loaded = True
             for ts in file.segments:
                 if ts:
@@ -125,42 +125,43 @@ def main(url, quality='best', fps=30.0, kafka_url="kafka-svc:9092"):
 
             #traitement des ts
             elif len(ts_list) != 0:
-                time_before = time.time()
-                #on récupère la 1ère ts
-                ts = ts_list.pop(0)
-                date = date_list.pop(0)
-                print('------ ' + str(date) + ' -------')
-                print('     len(ts_list) = ', len(ts_list))
-                
-                cap = cv2.VideoCapture(ts)
-                
-                # on update les compteurs pour la nouvelle ts
-                frames = 0
-                ts_num += 1
+                while len(ts_list) > 0:
+                    time_before = time.time()
+                    #on récupère la 1ère ts
+                    ts = ts_list.pop(0)
+                    date = date_list.pop(0)
+                    print('------ ' + str(date) + ' -------')
+                    print('     len(ts_list) = ', len(ts_list))
+                    
+                    cap = cv2.VideoCapture(ts)
+                    
+                    # on update les compteurs pour la nouvelle ts
+                    frames = 0
+                    ts_num += 1
 
-                ret = True
+                    ret = True
 
-                while frames < NUMBER_FRAMES_PER_TS:
-                    try:
-                        ret, frame = cap.read()
-                        for _ in range(int(NUMBER_FRAMES_PER_TS // (fps * TS_DURATION) - 1)):
-                            cap.read()
-                            frames += 1
-                        if ret:
-                            print(frame_number)
-                            frame_64 = base64.b64encode(cv2.imencode('.jpg', frame)[1]).decode()
-                            print("sending frame to kafka...")
-                            kafka_producer.send("phase1", value={'frame_number' : frame_number, "frame" : frame_64})
-                            print("sent !")
-                            #cv2.imwrite(f"{frame_number}.jpg", frame)
-                            frame_number += 1
-                            frames += 1
-                        else:
+                    while frames < NUMBER_FRAMES_PER_TS:
+                        try:
+                            ret, frame = cap.read()
+                            for _ in range(int(NUMBER_FRAMES_PER_TS // (fps * TS_DURATION) - 1)):
+                                cap.read()
+                                frames += 1
+                            if ret:
+                                print(frame_number)
+                                frame_64 = base64.b64encode(cv2.imencode('.jpg', frame)[1]).decode()
+                                print("sending frame to kafka...")
+                                kafka_producer.send("phase1", value={'frame_number' : frame_number, "frame" : frame_64, "timestampFrame" : str(date), "url" : url})
+                                print("sent !")
+                                #cv2.imwrite(f"{frame_number}.jpg", frame)
+                                frame_number += 1
+                                frames += 1
+                            else:
+                                break
+                        except KeyboardInterrupt:
                             break
-                    except KeyboardInterrupt:
-                        break
-                
-                cap.release()
+                    
+                    cap.release()
                 
                 # Make sure to wait the duration of a ts between two requests
                 time_now = time.time()

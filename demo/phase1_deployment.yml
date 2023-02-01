@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: phase1_deployment
+  name: phase1_deployment
+  namespace: sdtd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: phase1_deployment
+  template:
+    metadata:
+      labels:
+        app: phase1_deployment
+    spec:
+      containers:
+        - image: ilisius/deployment_phase1
+          imagePullPolicy: Always
+          name: phase1_deployment
+      restartPolicy: Always

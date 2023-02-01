@@ -1,0 +1,94 @@
+version: "3.9"
+services:
+
+  cassandra:
+    image: cassandra:4
+    ports:
+      - "9042:9042"
+    volumes:
+      - /var/lib/cassandra
+    networks:
+      - cassandra-net
+  cassandra-config:
+    image: cassandra:4
+    depends_on:
+      - cassandra
+    restart: "no"
+    entrypoint: ["/entrypoint-wrap.sh"]
+    networks:
+      - cassandra-net
+    volumes:
+      - ./cassandra_db/entrypoint-wrap.sh:/entrypoint-wrap.sh
+
+  zookeeper:
+    image: wurstmeister/zookeeper
+    container_name: zookeeper
+    ports:
+      - '2181:2181'
+    networks:
+      - kafka-net
+
+  kafka:
+    image: wurstmeister/kafka
+    restart: always
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_CREATE_TOPICS: "phase1:1:1, phase2:1:1"
+      KAFKA_ADVERTISED_LISTENERS: INTERN://kafka:29092,EXTERN://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERN:PLAINTEXT,EXTERN:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERN
+      KAFKA_LISTENERS: INTERN://kafka:29092,EXTERN://localhost:9092
+    networks:
+      - kafka-net
+    volumes:
+      - kafka_data:/wurstmeister/kafka
+
+  phase1:
+    build: phase1_stream_to_frame
+    environment:
+      - URL=https://www.twitch.tv/zerator
+      - FPS=10
+      - STREAM-QUALITY=720p60
+      - KAFKA_URL=kafka:29092
+    restart: unless-stopped
+    depends_on:
+      - kafka
+    volumes:
+      - stream_data:/app/stream
+    networks:
+      - kafka-net
+
+  phase2:
+    build: phase2_face_detection
+    restart: unless-stopped
+    depends_on:
+      - kafka
+    volumes:
+      - stream_data:/app/stream
+    networks:
+      - kafka-net
+
+  phase3:
+    build: phase3_emotion_detection
+    restart: unless-stopped
+    depends_on:
+      - kafka
+    volumes:
+      - stream_data:/app/stream
+    networks:
+      - kafka-net
+      - cassandra-net
+
+volumes:
+  stream_data:
+  kafka_data:
+
+networks:
+  kafka-net:
+    driver: bridge
+  cassandra-net:
+    driver: bridge

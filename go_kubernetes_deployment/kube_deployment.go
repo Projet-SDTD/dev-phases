@@ -177,41 +177,55 @@ func int64Ptr(i int64) *int64 { return &i }
 
 func (h *handlers) handleStreamStart(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("got /start request\n")
-	r.ParseForm()
-	url := r.FormValue("URL")
-	quality := r.FormValue("QUALITY")
-	fps := r.FormValue("FPS")
+	if r.Method == "POST" {
+		err := r.ParseMultipartForm(0)
+		if err != nil {
+			fmt.Printf("couldn't parse mutliform, trying with parse form\n")
+			r.ParseForm()
+		}
+		url := r.FormValue("URL")
+		quality := r.FormValue("QUALITY")
+		fps := r.FormValue("FPS")
 
-	if url == "" {
-		url = "https://twitch.tv/ponce"
-	}
-	if quality == "" {
-		quality = "720p60"
-	}
-	if fps == "" {
-		fps = "10"
-	}
-	splitted := strings.Split(url, "/")
-	streamerName := splitted[len(splitted)-1]
+		fmt.Printf("got url : " + url + " quality : " + quality + " fps : " + fps + "\n")
 
-	createDeployment(url, quality, fps, streamerName, h.KubeConfig)
-	w.Write([]byte("Created"))
+		if url == "" {
+			url = "https://twitch.tv/ponce"
+		}
+		if quality == "" {
+			quality = "720p60"
+		}
+		if fps == "" {
+			fps = "10"
+		}
+		splitted := strings.Split(url, "/")
+		streamerName := splitted[len(splitted)-1]
+
+		createDeployment(url, quality, fps, streamerName, h.KubeConfig)
+		w.Write([]byte("Created"))
+	}
 }
 
 func (h *handlers) handleStreamStop(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("got /stop request\n")
-	r.ParseForm()
-	url := r.FormValue("URL")
+	if r.Method == "POST" {
+		err := r.ParseMultipartForm(0)
+		if err != nil {
+			fmt.Printf("couldn't parse mutliform, trying with parse form\n")
+			r.ParseForm()
+		}
+		url := r.FormValue("URL")
 
-	//for test purposes only
-	if url == "" {
-		url = "https://twitch.tv/ponce"
+		//for test purposes only
+		if url == "" {
+			url = "https://twitch.tv/ponce"
+		}
+		splitted := strings.Split(url, "/")
+		streamerName := splitted[len(splitted)-1]
+
+		destroyDeployment(streamerName, h.KubeConfig)
+		w.Write([]byte("Destroyed"))
 	}
-	splitted := strings.Split(url, "/")
-	streamerName := splitted[len(splitted)-1]
-
-	destroyDeployment(streamerName, h.KubeConfig)
-	w.Write([]byte("Destroyed"))
 }
 
 func handlePing(w http.ResponseWriter, r *http.Request) {
@@ -221,35 +235,41 @@ func handlePing(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlers) handleDbtt(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("got /dbtt request\n")
+	if r.Method == "POST" || r.Method == "GET" {
+		err := r.ParseMultipartForm(0)
+		if err != nil {
+			fmt.Printf("couldn't parse mutliform, trying with parse form\n")
+			r.ParseForm()
+		}
+		streamingUrl := r.FormValue("URL")
+		fmt.Printf("got url : " + streamingUrl + "\n")
 
-	r.ParseForm()
-	streamingUrl := r.FormValue("URL")
+		w.Header().Set("Content-Type", "application/json")
+		rt := new([]singleLine)
+		var frameId, faceId, x, y, width, height, mainEmotion int
+		var timestampFrame, url string
+		var iter *gocql.Iter
+		if streamingUrl == "" {
+			iter = h.CassandraSession.Query(`SELECT frame_id, face_id, x, y, w, h, main_emotion, timestampFrame, url FROM Stream_DB.frames LIMIT 50`).Iter()
+		} else {
+			iter = h.CassandraSession.Query(`SELECT frame_id, face_id, x, y, w, h, main_emotion, timestampFrame, url FROM Stream_DB.frames WHERE url = ? LIMIT 1`, streamingUrl).Iter()
+		}
 
-	w.Header().Set("Content-Type", "application/json")
-	rt := new([]singleLine)
-	var frameId, faceId, x, y, width, height, mainEmotion int
-	var timestampFrame, url string
-	var iter *gocql.Iter
-	if streamingUrl == "" {
-		iter = h.CassandraSession.Query(`SELECT frame_id, face_id, x, y, w, h, main_emotion, timestampFrame, url FROM Stream_DB.frames LIMIT 50`).Iter()
-	} else {
-		iter = h.CassandraSession.Query(`SELECT frame_id, face_id, x, y, w, h, main_emotion, timestampFrame, url FROM Stream_DB.frames WHERE url = ? LIMIT 1`, streamingUrl).Iter()
+		for iter.Scan(&frameId, &faceId, &x, &y, &width, &height, &mainEmotion, &timestampFrame, &url) {
+			fmt.Println(frameId)
+			sl := singleLine{frameId, faceId, x, y, width, height, mainEmotion, timestampFrame, url}
+			*rt = append(*rt, sl)
+		}
+
+		fmt.Println(*rt)
+
+		js, err := json.Marshal(*rt)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Write(js)
 	}
-
-	for iter.Scan(&frameId, &faceId, &x, &y, &width, &height, &mainEmotion, &timestampFrame, &url) {
-		fmt.Println(frameId)
-		sl := singleLine{frameId, faceId, x, y, width, height, mainEmotion, timestampFrame, url}
-		*rt = append(*rt, sl)
-	}
-
-	fmt.Println(*rt)
-
-	js, err := json.Marshal(*rt)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Write(js)
 }
 
 func main() {
